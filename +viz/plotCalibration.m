@@ -27,10 +27,7 @@ function plotCalibration(predictedDelayMin, observedDelayMin, plotTitle, meta)
         return;
     end
 
-    fig = figure('Color','w','Name','Calibration','Position',[120 120 980 420]);
-    tiledlayout(fig,1,2,'TileSpacing','compact','Padding','compact');
-
-    nexttile;
+    fig = figure('Color','w','Name','Calibration: Predicted vs Observed','WindowStyle','docked');
     scatter(pred, obs, 28, [0.15 0.45 0.80], 'filled', 'MarkerFaceAlpha', 0.5);
     hold on;
     maxV = max([pred; obs]) * 1.05;
@@ -42,7 +39,7 @@ function plotCalibration(predictedDelayMin, observedDelayMin, plotTitle, meta)
     axis square;
     grid on;
 
-    nexttile;
+    fig2 = figure('Color','w','Name','Calibration: Binned Curve','WindowStyle','docked');
     edges = quantile(pred, linspace(0,1,6));
     edges = unique(edges);
     if numel(edges) < 3
@@ -70,7 +67,10 @@ function plotCalibration(predictedDelayMin, observedDelayMin, plotTitle, meta)
     legend({'Observed', 'Ideal'}, 'Location', 'northwest');
     grid on;
 
-    sgtitle(plotTitle, 'FontWeight', 'bold');
+    annotation(fig, 'textbox', [0.05 0.93 0.90 0.05], ...
+        'String', plotTitle, 'EdgeColor', 'none', 'FontWeight', 'bold', 'HorizontalAlignment', 'center');
+    annotation(fig2, 'textbox', [0.05 0.93 0.90 0.05], ...
+        'String', plotTitle, 'EdgeColor', 'none', 'FontWeight', 'bold', 'HorizontalAlignment', 'center');
 
     if ~isempty(fieldnames(meta))
         numCases = localField(meta, 'NumCases', numel(pred));
@@ -91,7 +91,8 @@ function plotCalibration(predictedDelayMin, observedDelayMin, plotTitle, meta)
             numCases, numCasesTest, dataSource, uncertaintyProfile, ...
             targetWakeDelayMin, earlyPenaltyWeight, conservativeMode, runTimestamp);
 
-        viz.addMetadataBox(fig, metaText, [0.73 0.70 0.25 0.24]);
+        viz.addMetadataBox(fig, metaText, [0.73 0.67 0.25 0.28]);
+        viz.addMetadataBox(fig2, metaText, [0.73 0.67 0.25 0.28]);
     end
 end
 

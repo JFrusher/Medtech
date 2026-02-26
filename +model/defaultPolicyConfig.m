@@ -22,4 +22,21 @@ function policy = defaultPolicyConfig(targetWakeDelayMin)
     policy.HighRiskBMIMin = 35;
     policy.HighRiskSurgeryDurationMin = 180;
     policy.EarlyAlarmThresholdMin = 1.0;
+
+    % Optimizer mode: 'legacy-bisection' (default) or 'robust-explainable'.
+    policy.OptimizerMode = 'legacy-bisection';
+    policy.EarlyPenaltyWeight = 12;
+    policy.RobustNumStopCandidates = 80;
+    policy.RobustNumScenarios = 120;
+    policy.RobustCVaRAlpha = 0.85;
+    policy.RobustCVaRWeight = 0.75;
+    policy.RobustEarlyProbWeight = 35;
+
+    % Parallel settings (adaptive): only parallelize sufficiently large cohorts.
+    policy.ParallelMinCases = 700;
+
+    % Progress reporting settings.
+    policy.ShowProgress = true;
+    policy.ProgressUpdateStepPct = 0.10;
+    policy.ProgressLabel = 'EvaluateStrategy';
 end

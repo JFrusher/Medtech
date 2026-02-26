@@ -6,7 +6,7 @@ function plotComparison(summary)
 % Inputs:
 %   summary - Struct containing TTW arrays and financial assumptions.
 % Outputs:
-%   None. Creates a MATLAB figure.
+%   None. Creates multiple MATLAB figures (docked windows).
 % Author:
 %   GitHub Copilot (GPT-5.3-Codex)
 
@@ -28,11 +28,7 @@ function plotComparison(summary)
     end
     binEdges = linspace(xMin, xMax, 18);
 
-    fig = figure('Color', 'w', 'Name', 'Anesthesia Emergence Predictor', ...
-        'Position', [80 80 1380 820]);
-    tiledlayout(fig, 2, 3, 'TileSpacing', 'compact', 'Padding', 'compact');
-
-    nexttile;
+    fig = figure('Color', 'w', 'Name', 'TTW Box Comparison (Test Set)', 'WindowStyle', 'docked');
     boxchart(categorical(repmat("Standard", numel(standardClipped), 1)), standardClipped, ...
         'BoxFaceColor', [0.65 0.65 0.65]);
     hold on;
@@ -42,8 +38,9 @@ function plotComparison(summary)
     title('TTW Box Comparison (Test Set)');
     ylim([0 maxDisplayTTWMin]);
     grid on;
+    viz.addMetadataBox(fig, localMetaText(summary), [0.72 0.66 0.26 0.30]);
 
-    nexttile;
+    fig = figure('Color', 'w', 'Name', 'Normalized Histogram (Shared Bins)', 'WindowStyle', 'docked');
     histogram(standardClipped, 'BinEdges', binEdges, 'Normalization', 'probability', ...
         'FaceColor', [0.7 0.7 0.7], 'FaceAlpha', 0.55, 'EdgeColor', 'none');
     hold on;
@@ -58,8 +55,9 @@ function plotComparison(summary)
         sprintf('Clipped >%d min: Std=%d, Opt=%d', maxDisplayTTWMin, clippedStandardN, clippedOptimizedN), ...
         'FontSize', 8.5, 'Color', [0.25 0.25 0.25]);
     grid on;
+    viz.addMetadataBox(fig, localMetaText(summary), [0.72 0.66 0.26 0.30]);
 
-    nexttile;
+    fig = figure('Color', 'w', 'Name', 'Stacked Violin Plot', 'WindowStyle', 'docked');
     localStackedViolin(standardClipped, optimizedClipped);
     xline(targetDelay, '--k', 'Target', 'LabelVerticalAlignment', 'middle');
     xlabel('Time to Wake (min)');
@@ -68,8 +66,9 @@ function plotComparison(summary)
     yticks([1 2]);
     yticklabels({'Standard', 'Optimized'});
     grid on;
+    viz.addMetadataBox(fig, localMetaText(summary), [0.72 0.66 0.26 0.30]);
 
-    nexttile;
+    fig = figure('Color', 'w', 'Name', 'Mean TTW (Test Set)', 'WindowStyle', 'docked');
     barData = [mean(standard), mean(optimized)];
     b = bar(barData, 0.6);
     b.FaceColor = 'flat';
@@ -82,8 +81,9 @@ function plotComparison(summary)
     reductionPct = 100 * max(mean(standard) - mean(optimized), 0) / max(mean(standard), eps);
     text(1.05, max(barData) * 0.85, sprintf('Reduction: %.1f%%', reductionPct), ...
         'FontWeight', 'bold', 'Color', [0.1 0.45 0.85]);
+    viz.addMetadataBox(fig, localMetaText(summary), [0.72 0.66 0.26 0.30]);
 
-    nexttile;
+    fig = figure('Color', 'w', 'Name', 'Per-Patient Sanity Check', 'WindowStyle', 'docked');
     scatter(standardClipped, optimizedClipped, 24, [0.2 0.45 0.8], 'filled', 'MarkerFaceAlpha', 0.55);
     hold on;
     maxAxis = maxDisplayTTWMin;
@@ -97,8 +97,9 @@ function plotComparison(summary)
     axis([0 maxAxis 0 maxAxis]);
     axis square;
     grid on;
+    viz.addMetadataBox(fig, localMetaText(summary), [0.72 0.66 0.26 0.30]);
 
-    nexttile;
+    fig = figure('Color', 'w', 'Name', 'OR Cost Impact', 'WindowStyle', 'docked');
     savingsAssumptionK = summary.AnnualSavingsAssumptionUSD / 1000;
     savingsCohortK = summary.CohortAnnualSavingsUSD / 1000;
     bar([savingsAssumptionK, savingsCohortK], 0.6, 'FaceColor', [0.2 0.65 0.3]);
@@ -108,29 +109,12 @@ function plotComparison(summary)
         summary.ORCostPerMinuteUSD, summary.AnnualCases));
     grid on;
 
-    annotation(fig, 'textbox', [0.07 0.005 0.92 0.055], ...
+    annotation(fig, 'textbox', [0.06 0.02 0.90 0.11], ...
         'String', sprintf(['Key Message: Earlier stop-time guidance reduces TTW and can unlock annual OR savings. ', ...
         'Test-set performance includes uncertainty and early-wake safety penalty. Assumption model (12->3 min) = $%.2fM/year.'], ...
         summary.AnnualSavingsAssumptionUSD / 1e6), ...
         'EdgeColor', 'none', 'FontSize', 11, 'FontWeight', 'bold', 'Color', [0.1 0.1 0.1]);
-
-    metaText = sprintf([ ...
-        'Cases(Total/Train/Test): %d/%d/%d\n', ...
-        'Data: %s | Uncertainty: %s\n', ...
-        'Target Delay: %.2f min | Penalty: %.1f\n', ...
-        'Conservative: %s | Early Alarm: %.2f%%\n', ...
-        'Display Cap: %.1f min\n', ...
-        'Run: %s'], ...
-        summary.NumCasesTotal, summary.NumCasesTrain, summary.NumCasesTest, ...
-        string(summary.DataSource), string(summary.UncertaintyProfile), ...
-        summary.TargetWakeDelayMin, summary.EarlyPenaltyWeight, ...
-        string(mat2str(summary.ConservativeMode)), summary.TestEarlyWakeAlarmRatePct, ...
-        summary.MaxDisplayTTWMin, ...
-        string(summary.RunTimestamp));
-
-    viz.addMetadataBox(fig, metaText, [0.73 0.70 0.25 0.24]);
-
-    sgtitle('Anesthesia Emergence Predictor: Test-Set Clinical, Safety, and Financial View', 'FontWeight', 'bold');
+    viz.addMetadataBox(fig, localMetaText(summary), [0.72 0.66 0.26 0.30]);
 
     function localStackedViolin(dataA, dataB)
         hold on;
@@ -166,5 +150,31 @@ function plotComparison(summary)
         end
 
         ylim([0.5 2.5]);
+    end
+end
+
+function textOut = localMetaText(summary)
+    textOut = sprintf([ ...
+        'Cases(Total/Train/Test): %d/%d/%d\n', ...
+        'Data: %s | Uncertainty: %s\n', ...
+        'Optimizer: %s\n', ...
+        'Target Delay: %.2f min | Penalty: %.1f\n', ...
+        'Conservative: %s | Early Alarm: %.2f%%\n', ...
+        'Display Cap: %.1f min\n', ...
+        'Run: %s'], ...
+        summary.NumCasesTotal, summary.NumCasesTrain, summary.NumCasesTest, ...
+        string(summary.DataSource), string(summary.UncertaintyProfile), ...
+        localField(summary, 'OptimizerMode', 'legacy-bisection'), ...
+        summary.TargetWakeDelayMin, summary.EarlyPenaltyWeight, ...
+        string(mat2str(summary.ConservativeMode)), summary.TestEarlyWakeAlarmRatePct, ...
+        summary.MaxDisplayTTWMin, ...
+        string(summary.RunTimestamp));
+end
+
+function value = localField(s, fieldName, defaultValue)
+    if isfield(s, fieldName)
+        value = s.(fieldName);
+    else
+        value = defaultValue;
     end
 end

@@ -29,14 +29,26 @@ function tuning = tuneSafetyBuffer(trainTable, baseTargetWakeDelayMin, candidate
     earlyRatePct = zeros(numCandidates, 1);
     meanTTW = zeros(numCandidates, 1);
 
+    policyLocal = policyConfig;
+    policyLocal.ShowProgress = false;
+
+    loopStart = tic;
+
     for i = 1:numCandidates
         testTargetDelay = baseTargetWakeDelayMin + candidateBufferMin(i);
         metrics = model.evaluateStrategy( ...
-            trainTable, testTargetDelay, emergenceThresholdCe, dtMin, earlyPenaltyWeight, policyConfig, uncertaintyConfig);
+            trainTable, testTargetDelay, emergenceThresholdCe, dtMin, earlyPenaltyWeight, policyLocal, uncertaintyConfig);
 
         score(i) = metrics.MeanPenalizedLoss;
         earlyRatePct(i) = metrics.EarlyWakeRatePct;
         meanTTW(i) = metrics.MeanOptimizedTTW;
+
+        if i == 1 || i == numCandidates || mod(i, max(1, ceil(numCandidates / 5))) == 0
+            elapsedSec = toc(loopStart);
+            etaSec = max((elapsedSec / i) * (numCandidates - i), 0);
+            utils.logger('INFO', sprintf('Safety-buffer tuning %3.0f%%%% (%d/%d), ETA %s', ...
+                100 * i / numCandidates, i, numCandidates, localFmtDuration(etaSec)));
+        end
     end
 
     [~, bestIdx] = min(score);
@@ -51,4 +63,16 @@ function tuning = tuneSafetyBuffer(trainTable, baseTargetWakeDelayMin, candidate
     tuning.MeanOptimizedTTW = meanTTW;
     tuning.Table = table(candidateBufferMin(:), score, earlyRatePct, meanTTW, ...
         'VariableNames', {'BufferMin', 'PenalizedLoss', 'EarlyWakeRatePct', 'MeanOptimizedTTW'});
+end
+
+function txt = localFmtDuration(sec)
+    totalSec = max(0, round(sec));
+    hh = floor(totalSec / 3600);
+    mm = floor(mod(totalSec, 3600) / 60);
+    ss = mod(totalSec, 60);
+    if hh > 0
+        txt = sprintf('%02d:%02d:%02d', hh, mm, ss);
+    else
+        txt = sprintf('%02d:%02d', mm, ss);
+    end
 end

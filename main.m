@@ -24,7 +24,7 @@ function main()
 
     dataSourcePreference = getenv('AEP_DATA_SOURCE');
     if isempty(dataSourcePreference)
-        dataSourcePreference = 'synthetic';
+        dataSourcePreference = 'vitaldb';
     end
     dataSourceUsed = lower(string(dataSourcePreference));
     retrospectiveCsvPath = fullfile(dataDir, 'retrospective_cases.csv');
@@ -100,6 +100,19 @@ function main()
     policy = model.defaultPolicyConfig(baseTargetWakeDelayMin);
     policy.ConservativeMode = true;
 
+    optimizerMode = getenv('AEP_OPTIMIZER_MODE');
+    if isempty(optimizerMode)
+        optimizerMode = 'robust-explainable';
+    end
+    policy.OptimizerMode = lower(string(optimizerMode));
+    utils.logger('INFO', sprintf('Optimizer mode: %s', char(policy.OptimizerMode)));
+
+    parallelCfg = utils.configureParallelPool();
+    policy.UseParallel = parallelCfg.Enabled;
+    policy.ParallelWorkers = parallelCfg.NumWorkers;
+    utils.logger('INFO', sprintf('Parallel evaluation enabled: %s (%d workers).', ...
+        char(string(policy.UseParallel)), policy.ParallelWorkers));
+
     uncertainty = model.defaultUncertaintyConfig(uncertaintyProfile);
     uncertainty = model.calibrateUncertaintyModel(trainTable, emergenceThreshold, simDtMin, uncertainty);
     utils.logger('INFO', sprintf('Uncertainty profile active: %s', uncertainty.ProfileName));
@@ -124,26 +137,43 @@ function main()
         trainTable, baseTargetWakeDelayMin, candidateSafetyBufferMin, ...
         emergenceThreshold, simDtMin, penaltyWeights, policy, uncertainty);
 
+    trainPolicy = policy;
+    trainPolicy.ShowProgress = true;
+    trainPolicy.ProgressLabel = 'Train evaluation';
     trainMetrics = model.evaluateStrategy( ...
         trainTable, selectedTargetWakeDelayMin, emergenceThreshold, simDtMin, ...
-        earlyPenaltyWeight, policy, uncertainty);
+        earlyPenaltyWeight, trainPolicy, uncertainty);
+
+    testPolicy = policy;
+    testPolicy.ShowProgress = true;
+    testPolicy.ProgressLabel = 'Test evaluation';
     testMetrics = model.evaluateStrategy( ...
         testTable, selectedTargetWakeDelayMin, emergenceThreshold, simDtMin, ...
-        earlyPenaltyWeight, policy, uncertainty);
+        earlyPenaltyWeight, testPolicy, uncertainty);
 
     seedSweepCount = 20;
     seedSweepMeanTTW = zeros(seedSweepCount, 1);
     seedSweepSavings = zeros(seedSweepCount, 1);
     seedSweepEarlyAlarm = zeros(seedSweepCount, 1);
+    seedPolicy = policy;
+    seedPolicy.ShowProgress = false;
+    seedLoopStart = tic;
 
     for s = 1:seedSweepCount
         rng(500 + s, 'twister');
         metricsSweep = model.evaluateStrategy( ...
             testTable, selectedTargetWakeDelayMin, emergenceThreshold, simDtMin, ...
-            earlyPenaltyWeight, policy, uncertainty);
+            earlyPenaltyWeight, seedPolicy, uncertainty);
         seedSweepMeanTTW(s) = metricsSweep.MeanOptimizedTTW;
         seedSweepSavings(s) = max(metricsSweep.MeanStandardTTW - metricsSweep.MeanOptimizedTTW, 0) * 50 * 3000;
         seedSweepEarlyAlarm(s) = metricsSweep.EarlyWakeAlarmRatePct;
+
+        if s == 1 || s == seedSweepCount || mod(s, max(1, ceil(seedSweepCount / 5))) == 0
+            elapsedSec = toc(seedLoopStart);
+            etaSec = max((elapsedSec / s) * (seedSweepCount - s), 0);
+            utils.logger('INFO', sprintf('Seed sweep %3.0f%%%% (%d/%d), ETA %s', ...
+                100 * s / seedSweepCount, s, seedSweepCount, localFmtDuration(etaSec)));
+        end
     end
 
     ciTTW = localMeanCI(seedSweepMeanTTW);
@@ -201,6 +231,24 @@ function main()
     summary.DataSource = char(dataSourceUsed);
     summary.ConservativeMode = policy.ConservativeMode;
     summary.EarlyAlarmThresholdMin = policy.EarlyAlarmThresholdMin;
+    summary.OptimizerMode = char(policy.OptimizerMode);
+    summary.UseParallel = policy.UseParallel;
+    summary.ParallelWorkers = policy.ParallelWorkers;
+    if isfield(policy, 'RobustCVaRAlpha')
+        summary.RobustCVaRAlpha = policy.RobustCVaRAlpha;
+    end
+    if isfield(policy, 'RobustCVaRWeight')
+        summary.RobustCVaRWeight = policy.RobustCVaRWeight;
+    end
+    if isfield(policy, 'RobustEarlyProbWeight')
+        summary.RobustEarlyProbWeight = policy.RobustEarlyProbWeight;
+    end
+    if isfield(policy, 'RobustNumScenarios')
+        summary.RobustNumScenarios = policy.RobustNumScenarios;
+    end
+    if isfield(policy, 'RobustNumStopCandidates')
+        summary.RobustNumStopCandidates = policy.RobustNumStopCandidates;
+    end
     summary.RunTimestamp = datestr(now, 'yyyy-mm-dd HH:MM');
     summary.MaxDisplayTTWMin = maxDisplayTTWMin;
 
@@ -225,6 +273,7 @@ function main()
     utils.logger('INFO', sprintf('Saved datasets in: %s', dataDir));
 
     viz.plotComparison(summary);
+    viz.plotAlgorithmOverview(summary);
 
     if ismember('ObservedWakeDelayMin', testTable.Properties.VariableNames)
         observedMask = ~isnan(testTable.ObservedWakeDelayMin) & testTable.ObservedWakeDelayMin >= 0;
@@ -261,4 +310,16 @@ function [trainTable, testTable] = localSplit(fullTable, trainRatio)
     nTrain = max(1, min(height(fullTable) - 1, round(trainRatio * height(fullTable))));
     trainTable = fullTable(idx(1:nTrain), :);
     testTable = fullTable(idx(nTrain + 1:end), :);
+end
+
+function txt = localFmtDuration(sec)
+    totalSec = max(0, round(sec));
+    hh = floor(totalSec / 3600);
+    mm = floor(mod(totalSec, 3600) / 60);
+    ss = mod(totalSec, 60);
+    if hh > 0
+        txt = sprintf('%02d:%02d:%02d', hh, mm, ss);
+    else
+        txt = sprintf('%02d:%02d', mm, ss);
+    end
 end
