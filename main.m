@@ -73,15 +73,15 @@ function main()
             end
 
         case "vitaldb"
-            if exist(vitaldbCsvPath, 'file')
-                fullTable = emulator.loadVitalDBData(vitaldbCsvPath);
-                [trainTable, testTable] = localSplit(fullTable, trainRatio);
-                utils.logger('INFO', sprintf('Loaded VitalDB cohort: %d total (%d train / %d test).', ...
-                    height(fullTable), height(trainTable), height(testTable)));
-            elseif exist(vitaldbDetailedCsvPath, 'file')
+            if exist(vitaldbDetailedCsvPath, 'file')
                 fullTable = emulator.loadVitalDBData(vitaldbDetailedCsvPath);
                 [trainTable, testTable] = localSplit(fullTable, trainRatio);
                 utils.logger('INFO', sprintf('Loaded VitalDB detailed cohort: %d total (%d train / %d test).', ...
+                    height(fullTable), height(trainTable), height(testTable)));
+            elseif exist(vitaldbCsvPath, 'file')
+                fullTable = emulator.loadVitalDBData(vitaldbCsvPath);
+                [trainTable, testTable] = localSplit(fullTable, trainRatio);
+                utils.logger('INFO', sprintf('Loaded VitalDB cohort: %d total (%d train / %d test).', ...
                     height(fullTable), height(trainTable), height(testTable)));
             else
                 dataSourceUsed = "synthetic";
