@@ -77,6 +77,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--query-file", help="Path to SQL query file")
     parser.add_argument("--caseids", help="Comma-separated VitalDB caseids for --source=vitaldb-lib")
     parser.add_argument("--caseids-file", help="Path to TXT/CSV containing VitalDB caseids for --source=vitaldb-lib")
+    parser.add_argument("--caseids-only", action="store_true", help="Only collect caseids and write them to CSV")
+    parser.add_argument("--caseids-output", default="data/vitaldb_caseids.csv", help="Output CSV path for collected caseids")
+    parser.add_argument("--detailed-output", default="data/vitaldb_detailed_cases.csv", help="Optional detailed clinical CSV output path")
 
     return parser.parse_args()
 
@@ -161,14 +164,25 @@ def discover_all_vitaldb_caseids() -> list[int]:
         except TypeError:
             continue
 
-    if payload is None:
-        raise RuntimeError(
-            "Unable to auto-discover caseids via vitaldb.load_clinical_data(). "
-            "Provide --caseids, --caseids-file, or --input-csv as a fallback."
-        )
+    values: list[int] = []
+    if payload is not None:
+        values.extend(_extract_caseids_from_df(_coerce_to_dataframe(payload)))
 
-    df = _coerce_to_dataframe(payload)
-    values = _extract_caseids_from_df(df)
+    if not values:
+        try:
+            dense_caseids = list(range(1, 7000))
+            payload = vitaldb.load_clinical_data(caseids=dense_caseids, params=["caseid"])
+            values.extend(_extract_caseids_from_df(_coerce_to_dataframe(payload)))
+        except Exception:
+            pass
+
+    if not values and hasattr(vitaldb, "api_url"):
+        try:
+            df = pd.read_csv(f"{vitaldb.api_url}/cases")
+            values.extend(_extract_caseids_from_df(df))
+        except Exception:
+            pass
+
     unique = sorted(set(values))
     if not unique:
         raise ValueError(
@@ -297,6 +311,38 @@ def fetch_vitaldb_clinical_rows(caseids: list[int]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def fetch_vitaldb_clinical_table(caseids: list[int]) -> pd.DataFrame:
+    vitaldb = importlib.import_module("vitaldb")
+    payload = vitaldb.load_clinical_data(caseids=caseids)
+    df = _coerce_to_dataframe(payload)
+    if df.empty:
+        raise ValueError("No rows returned from vitaldb.load_clinical_data(caseids=...).")
+    return df
+
+
+def prepare_vitaldb_full_raw(clinical_df: pd.DataFrame) -> pd.DataFrame:
+    raw = clinical_df.copy()
+    rename_map = {
+        "caseid": "case_id",
+        "height": "height_cm",
+        "weight": "weight_kg",
+        "opstart": "surgery_start_time",
+        "opend": "surgery_end_time",
+        "intraop_ppf": "propofol_total_dose_mg",
+    }
+    for src, dst in rename_map.items():
+        if src in raw.columns and dst not in raw.columns:
+            raw[dst] = raw[src]
+
+    if "surgery_duration_min" not in raw.columns:
+        start_offsets = to_numeric(pick_series(raw, ["opstart", "surgery_start_time"]))
+        end_offsets = to_numeric(pick_series(raw, ["opend", "surgery_end_time"]))
+        if start_offsets is not None and end_offsets is not None:
+            raw["surgery_duration_min"] = (end_offsets - start_offsets) / 60.0
+
+    return raw
+
+
 def merge_vitaldb_clinical(base_raw: pd.DataFrame, clinical_raw: pd.DataFrame, field_map: dict[str, list[str]]) -> pd.DataFrame:
     merged = base_raw.copy()
 
@@ -355,7 +401,7 @@ def to_numeric(s: Optional[pd.Series]) -> Optional[pd.Series]:
 def to_datetime(s: Optional[pd.Series]) -> Optional[pd.Series]:
     if s is None:
         return None
-    return s.apply(lambda v: dt_parser.parse(str(v)) if pd.notna(v) else pd.NaT)
+    return pd.to_datetime(s, errors="coerce")
 
 
 def hash_id(raw_id: Any, salt: str) -> str:
@@ -478,13 +524,26 @@ def main() -> None:
         raw = fetch_api_rows(args.api_url, args.api_token, args.api_timeout)
     elif args.source == "vitaldb-lib":
         caseids = parse_caseids(args.caseids, args.caseids_file, args.input_csv)
+        if args.caseids_only:
+            caseids_path = Path(args.caseids_output)
+            caseids_path.parent.mkdir(parents=True, exist_ok=True)
+            pd.DataFrame({"caseid": caseids}).to_csv(caseids_path, index=False)
+            print(f"Wrote {len(caseids)} collected caseids to: {caseids_path}")
+            return
+
+        clinical_full = fetch_vitaldb_clinical_table(caseids)
+        detailed_path = Path(args.detailed_output)
+        detailed_path.parent.mkdir(parents=True, exist_ok=True)
+        clinical_full.to_csv(detailed_path, index=False)
+        print(f"Wrote detailed VitalDB clinical data ({len(clinical_full)} rows) to: {detailed_path}")
+
         clinical = fetch_vitaldb_clinical_rows(caseids)
 
         if args.input_csv:
             raw = pd.read_csv(args.input_csv)
             raw = merge_vitaldb_clinical(raw, clinical, field_map)
         else:
-            raw = clinical
+            raw = prepare_vitaldb_full_raw(clinical_full)
     elif args.source == "mimiciv-sql":
         raw = fetch_sql_rows(args.db_uri, args.query_file)
     else:

@@ -10,7 +10,7 @@ function main()
 % Author:
 %   GitHub Copilot (GPT-5.3-Codex)
 
-    clc;
+    %clc;
     setupProject();
 
     rng(42, 'twister');
@@ -28,7 +28,8 @@ function main()
     end
     dataSourceUsed = lower(string(dataSourcePreference));
     retrospectiveCsvPath = fullfile(dataDir, 'retrospective_cases.csv');
-    vitaldbCsvPath = fullfile(dataDir, 'vitaldb_cases.csv');
+    vitaldbCsvPath = fullfile(dataDir, 'vitaldb_detailed_cases.csv');
+    vitaldbDetailedCsvPath = fullfile(dataDir, 'vitaldb_detailed_cases.csv');
     mimicivCsvPath = fullfile(dataDir, 'mimiciv_cases.csv');
     totalPatients = 1000;
     trainRatio = 0.8;
@@ -53,11 +54,16 @@ function main()
                 [trainTable, testTable] = localSplit(fullTable, trainRatio);
                 utils.logger('INFO', sprintf('Loaded VitalDB cohort: %d total (%d train / %d test).', ...
                     height(fullTable), height(trainTable), height(testTable)));
+            elseif exist(vitaldbDetailedCsvPath, 'file')
+                fullTable = emulator.loadVitalDBData(vitaldbDetailedCsvPath);
+                [trainTable, testTable] = localSplit(fullTable, trainRatio);
+                utils.logger('INFO', sprintf('Loaded VitalDB detailed cohort: %d total (%d train / %d test).', ...
+                    height(fullTable), height(trainTable), height(testTable)));
             else
                 dataSourceUsed = "synthetic";
                 [trainTable, testTable, fullTable] = emulator.createTrainTestData(totalPatients, trainRatio);
-                utils.logger('WARN', sprintf(['VitalDB file not found at %s. ', ...
-                    'Using synthetic cohort for this run.'], vitaldbCsvPath));
+                utils.logger('WARN', sprintf(['VitalDB files not found at %s or %s. ', ...
+                    'Using synthetic cohort for this run.'], vitaldbCsvPath, vitaldbDetailedCsvPath));
             end
 
         case {"mimic-iv", "mimiciv", "mimic"}

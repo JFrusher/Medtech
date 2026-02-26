@@ -35,19 +35,25 @@ function clinicalTable = standardizeClinicalSchema(rawTable, sourceName)
     end
 
     if isempty(surgeryDurationMin)
-        startTime = pickAny(t, {'SurgeryStartTime','surgery_start_time','anesthesia_start_time','starttime','start_time'});
-        endTime = pickAny(t, {'SurgeryEndTime','surgery_end_time','anesthesia_end_time','endtime','end_time'});
+        startTime = pickAny(t, {'SurgeryStartTime','surgery_start_time','starttime','start_time','opstart'});
+        endTime = pickAny(t, {'SurgeryEndTime','surgery_end_time','endtime','end_time','opend'});
         if ~isempty(startTime) && ~isempty(endTime)
-            startDt = toDatetime(startTime);
-            endDt = toDatetime(endTime);
-            surgeryDurationMin = minutes(endDt - startDt);
+            surgeryDurationMin = deriveDurationMinutes(startTime, endTime);
         end
     end
 
     if isempty(infusionRateMgPerMin)
-        totalDoseMg = pickNumeric(t, {'PropofolTotalDoseMg','propofol_total_dose_mg','total_propofol_mg','propofol_dose_mg'});
+        totalDoseMg = pickNumeric(t, {'PropofolTotalDoseMg','propofol_total_dose_mg','total_propofol_mg','propofol_dose_mg','intraop_ppf'});
         if ~isempty(totalDoseMg) && ~isempty(surgeryDurationMin)
             infusionRateMgPerMin = totalDoseMg ./ max(surgeryDurationMin, 1);
+        end
+    end
+
+    if isempty(observedWakeDelayMin)
+        surgeryEndTime = pickAny(t, {'SurgeryEndTime','surgery_end_time','endtime','end_time','opend'});
+        anesthesiaEndTime = pickAny(t, {'AnesthesiaEndTime','anesthesia_end_time','aneend'});
+        if ~isempty(surgeryEndTime) && ~isempty(anesthesiaEndTime)
+            observedWakeDelayMin = deriveDurationMinutes(surgeryEndTime, anesthesiaEndTime);
         end
     end
 
@@ -121,9 +127,57 @@ end
 function dt = toDatetime(raw)
     if isdatetime(raw)
         dt = raw;
-    else
-        dt = datetime(raw, 'InputFormat', 'yyyy-MM-dd HH:mm:ss', 'Format', 'yyyy-MM-dd HH:mm:ss');
+        return;
     end
+
+    if isnumeric(raw)
+        dt = NaT(size(raw));
+        return;
+    end
+
+    sx = string(raw);
+    dt = NaT(size(sx));
+    for i = 1:numel(sx)
+        token = strtrim(sx(i));
+        if token == "" || lower(token) == "nan" || token == "0"
+            continue;
+        end
+        try
+            dt(i) = datetime(token, 'InputFormat', 'yyyy-MM-dd HH:mm:ss', 'Format', 'yyyy-MM-dd HH:mm:ss');
+        catch
+            try
+                dt(i) = datetime(token);
+            catch
+                dt(i) = NaT;
+            end
+        end
+    end
+end
+
+function durationMin = deriveDurationMinutes(startRaw, endRaw)
+    startNum = toNumeric(startRaw);
+    endNum = toNumeric(endRaw);
+
+    if ~isempty(startNum) && ~isempty(endNum)
+        delta = endNum - startNum;
+        positive = delta(isfinite(delta) & delta > 0);
+        if isempty(positive)
+            durationMin = delta;
+        else
+            if median(positive, 'omitnan') > 500
+                durationMin = delta ./ 60;
+            else
+                durationMin = delta;
+            end
+        end
+        durationMin(durationMin < 0) = NaN;
+        return;
+    end
+
+    startDt = toDatetime(startRaw);
+    endDt = toDatetime(endRaw);
+    durationMin = minutes(endDt - startDt);
+    durationMin(durationMin < 0) = NaN;
 end
 
 function sex = normalizeSex(sexRaw, n)
