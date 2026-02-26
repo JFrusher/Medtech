@@ -18,6 +18,7 @@ Source modes:
 1) vitaldb-api: generic REST API ingestion (user-configured endpoint + field map)
 2) mimiciv-sql: PostgreSQL/MIMIC-style SQL ingestion
 3) csv: convert an existing extract CSV to standardized, de-identified format
+4) vitaldb-lib: use vitaldb.load_clinical_data() for chosen caseid(s)
 """
 
 from __future__ import annotations
@@ -61,12 +62,12 @@ class BuildConfig:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build de-identified cohort CSV for AEP")
-    parser.add_argument("--source", required=True, choices=["vitaldb-api", "mimiciv-sql", "csv"])
+    parser.add_argument("--source", required=True, choices=["vitaldb-api", "mimiciv-sql", "csv", "vitaldb-lib"])
     parser.add_argument("--output", default="data/vitaldb_cases.csv", help="Output CSV path")
     parser.add_argument("--field-map", help="Optional JSON file overriding source field aliases")
     parser.add_argument("--deid-salt", default=os.getenv("AEP_DEID_SALT", "change-me-salt"))
 
-    parser.add_argument("--input-csv", help="Input CSV path when --source=csv")
+    parser.add_argument("--input-csv", help="Input CSV path when --source=csv or --source=vitaldb-lib")
 
     parser.add_argument("--api-url", help="REST URL returning case-level JSON list when --source=vitaldb-api")
     parser.add_argument("--api-token", default=os.getenv("VITALDB_API_TOKEN"), help="Bearer token for API")
@@ -74,6 +75,8 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--db-uri", default=os.getenv("MIMIC_DB_URI"), help="SQLAlchemy DB URI for MIMIC/Postgres")
     parser.add_argument("--query-file", help="Path to SQL query file")
+    parser.add_argument("--caseids", help="Comma-separated VitalDB caseids for --source=vitaldb-lib")
+    parser.add_argument("--caseids-file", help="Path to TXT/CSV containing VitalDB caseids for --source=vitaldb-lib")
 
     return parser.parse_args()
 
@@ -131,6 +134,207 @@ def fetch_sql_rows(db_uri: str, query_file: str) -> pd.DataFrame:
     engine = create_engine(db_uri)
     with engine.connect() as conn:
         return pd.read_sql(text(query), conn)
+
+
+def _extract_caseids_from_df(df: pd.DataFrame) -> list[int]:
+    case_series = pick_series(df, ["caseid", "case_id", "case"])
+    if case_series is None:
+        return []
+    return pd.to_numeric(case_series, errors="coerce").dropna().astype(int).tolist()
+
+
+def discover_all_vitaldb_caseids() -> list[int]:
+    vitaldb = importlib.import_module("vitaldb")
+
+    payload = None
+    attempts = [
+        lambda: vitaldb.load_clinical_data(),
+        lambda: vitaldb.load_clinical_data(None),
+        lambda: vitaldb.load_clinical_data(caseid=None),
+        lambda: vitaldb.load_clinical_data(caseids=None),
+    ]
+
+    for attempt in attempts:
+        try:
+            payload = attempt()
+            break
+        except TypeError:
+            continue
+
+    if payload is None:
+        raise RuntimeError(
+            "Unable to auto-discover caseids via vitaldb.load_clinical_data(). "
+            "Provide --caseids, --caseids-file, or --input-csv as a fallback."
+        )
+
+    df = _coerce_to_dataframe(payload)
+    values = _extract_caseids_from_df(df)
+    unique = sorted(set(values))
+    if not unique:
+        raise ValueError(
+            "Auto-discovery returned no caseids. Provide --caseids, --caseids-file, or --input-csv."
+        )
+    return unique
+
+
+def parse_caseids(caseids_arg: Optional[str], caseids_file: Optional[str], input_csv: Optional[str]) -> list[int]:
+    values: list[int] = []
+
+    if caseids_arg:
+        for token in caseids_arg.split(","):
+            token = token.strip()
+            if token:
+                values.append(int(float(token)))
+
+    if caseids_file:
+        path = Path(caseids_file)
+        if not path.exists():
+            raise ValueError(f"--caseids-file not found: {caseids_file}")
+
+        if path.suffix.lower() == ".csv":
+            df = pd.read_csv(path)
+            series = pick_series(df, ["caseid", "case_id", "case"])
+            if series is None:
+                raise ValueError("--caseids-file CSV must include one of: caseid, case_id, case")
+            parsed = pd.to_numeric(series, errors="coerce").dropna().astype(int).tolist()
+            values.extend(parsed)
+        else:
+            lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()]
+            for line in lines:
+                if line:
+                    values.append(int(float(line)))
+
+    if not values and input_csv:
+        df = pd.read_csv(input_csv)
+        values.extend(_extract_caseids_from_df(df))
+
+    unique = sorted(set(values))
+    if not unique:
+        unique = discover_all_vitaldb_caseids()
+    return unique
+
+
+def _coerce_to_dataframe(payload: Any) -> pd.DataFrame:
+    if payload is None:
+        return pd.DataFrame()
+    if isinstance(payload, pd.DataFrame):
+        return payload
+    if isinstance(payload, dict):
+        return pd.DataFrame([payload])
+    if isinstance(payload, list):
+        return pd.DataFrame(payload)
+    try:
+        return pd.DataFrame(payload)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _extract_clinical_row(df: pd.DataFrame, caseid: int) -> dict[str, Any]:
+    if df.empty:
+        return {}
+
+    df_local = df.copy()
+    case_series = pick_series(df_local, ["caseid", "case_id", "case"])
+    if case_series is not None:
+        case_numeric = pd.to_numeric(case_series, errors="coerce")
+        matched = df_local.loc[case_numeric == caseid]
+        if not matched.empty:
+            df_local = matched
+
+    row = df_local.iloc[0]
+
+    def first_value(aliases: list[str]) -> Any:
+        for alias in aliases:
+            for col in df_local.columns:
+                if col.lower() == alias.lower():
+                    return row[col]
+        return np.nan
+
+    return {
+        "case_id": caseid,
+        "age": first_value(["age"]),
+        "sex": first_value(["sex", "gender"]),
+        "height_cm": first_value(["height_cm", "height"]),
+        "weight_kg": first_value(["weight_kg", "weight"]),
+        "bmi": first_value(["bmi"]),
+    }
+
+
+def fetch_vitaldb_clinical_rows(caseids: list[int]) -> pd.DataFrame:
+    vitaldb = importlib.import_module("vitaldb")
+    rows: list[dict[str, Any]] = []
+
+    for caseid in caseids:
+        payload = None
+        attempts = [
+            lambda cid=caseid: vitaldb.load_clinical_data(cid),
+            lambda cid=caseid: vitaldb.load_clinical_data(caseid=cid),
+            lambda cid=caseid: vitaldb.load_clinical_data([cid]),
+            lambda cid=caseid: vitaldb.load_clinical_data(caseids=[cid]),
+        ]
+
+        for attempt in attempts:
+            try:
+                payload = attempt()
+                break
+            except TypeError:
+                continue
+
+        if payload is None:
+            raise RuntimeError(
+                "Unable to call vitaldb.load_clinical_data for caseid "
+                f"{caseid}. Please check your installed vitaldb version."
+            )
+
+        df = _coerce_to_dataframe(payload)
+        row = _extract_clinical_row(df, caseid)
+        if row:
+            rows.append(row)
+
+    if not rows:
+        raise ValueError("No clinical rows were returned by vitaldb.load_clinical_data().")
+
+    return pd.DataFrame(rows)
+
+
+def merge_vitaldb_clinical(base_raw: pd.DataFrame, clinical_raw: pd.DataFrame, field_map: dict[str, list[str]]) -> pd.DataFrame:
+    merged = base_raw.copy()
+
+    base_case = pick_series(merged, field_map["case_id"])
+    if base_case is None:
+        raise ValueError("Input data is missing case_id/caseid needed for VitalDB clinical merge.")
+
+    merged["__case_id"] = pd.to_numeric(base_case, errors="coerce")
+
+    clinical = clinical_raw.copy()
+    clinical["__case_id"] = pd.to_numeric(clinical["case_id"], errors="coerce")
+    clinical = clinical.drop_duplicates(subset=["__case_id"])
+
+    merged = merged.merge(
+        clinical[["__case_id", "age", "sex", "height_cm", "weight_kg", "bmi"]],
+        on="__case_id",
+        how="left",
+        suffixes=("", "__vital"),
+    )
+
+    def fill_or_create(column: str) -> None:
+        enriched_col = f"{column}__vital"
+        if enriched_col in merged.columns:
+            if column in merged.columns:
+                merged[column] = merged[column].combine_first(merged[enriched_col])
+            else:
+                merged[column] = merged[enriched_col]
+            merged.drop(columns=[enriched_col], inplace=True)
+        elif column not in merged.columns:
+            merged[column] = np.nan
+
+    fill_or_create("age")
+    fill_or_create("sex")
+    fill_or_create("height_cm")
+    fill_or_create("weight_kg")
+    fill_or_create("bmi")
+
+    return merged.drop(columns=["__case_id"])
 
 
 def pick_series(df: pd.DataFrame, aliases: Iterable[str]) -> Optional[pd.Series]:
@@ -272,6 +476,15 @@ def main() -> None:
         raw = pd.read_csv(args.input_csv)
     elif args.source == "vitaldb-api":
         raw = fetch_api_rows(args.api_url, args.api_token, args.api_timeout)
+    elif args.source == "vitaldb-lib":
+        caseids = parse_caseids(args.caseids, args.caseids_file, args.input_csv)
+        clinical = fetch_vitaldb_clinical_rows(caseids)
+
+        if args.input_csv:
+            raw = pd.read_csv(args.input_csv)
+            raw = merge_vitaldb_clinical(raw, clinical, field_map)
+        else:
+            raw = clinical
     elif args.source == "mimiciv-sql":
         raw = fetch_sql_rows(args.db_uri, args.query_file)
     else:

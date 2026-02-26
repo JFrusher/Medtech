@@ -25,6 +25,36 @@ If your API field names differ, provide a field-map JSON with aliases:
 python etl/build_deidentified_cohort.py --source vitaldb-api --api-url "..." --field-map etl/field_map.json --output data/vitaldb_cases.csv
 ```
 
+## Option A2: VitalDB Python Library (`load_clinical_data`) -> CSV
+
+Use this mode when you want to pull demographics/body metrics directly from `vitaldb.load_clinical_data()` for specific case IDs.
+
+```powershell
+$env:AEP_DEID_SALT = "replace-with-long-random-secret"
+python etl/build_deidentified_cohort.py `
+  --source vitaldb-lib `
+  --caseids "1,2,3" `
+  --output data/vitaldb_cases.csv
+```
+
+You can also pass a file of case IDs:
+
+```powershell
+python etl/build_deidentified_cohort.py `
+  --source vitaldb-lib `
+  --caseids-file data/caseids.csv `
+  --output data/vitaldb_cases.csv
+```
+
+If you already have a base case CSV (e.g., durations/dose fields) and only need to enrich demographics (`age`, `sex`, `height`, `weight`, `bmi`) from VitalDB:
+
+```powershell
+python etl/build_deidentified_cohort.py `
+  --source vitaldb-lib `
+  --input-csv data/raw_export.csv `
+  --output data/vitaldb_cases.csv
+```
+
 ## Option B: MIMIC-IV SQL -> CSV
 
 ```powershell
