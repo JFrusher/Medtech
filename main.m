@@ -24,6 +24,15 @@ function main()
 %       true/false
 %       false (default): skips expensive tuning/sensitivity for faster runs
 %       true: runs full safety-buffer and penalty sensitivity sweeps
+%   AEP_USE_TUNING_CACHE
+%       true/false
+%       true (default): load precomputed tuning when cache key matches
+%   AEP_TUNING_CACHE_REFRESH
+%       true/false
+%       true: ignore existing cache and recompute tuning
+%   AEP_FIXED_BUFFER_MIN
+%       Numeric buffer in minutes (e.g., 0.75)
+%       When set, bypasses safety-buffer tuning and uses this fixed buffer
 
     %clc;
     setupProject();
@@ -133,8 +142,63 @@ function main()
     utils.logger('INFO', sprintf('Uncertainty profile active: %s', uncertainty.ProfileName));
 
     candidateSafetyBufferMin = 0:0.25:3;
+    fixedBufferMin = localEnvNumber('AEP_FIXED_BUFFER_MIN', NaN);
+    useFixedBuffer = isfinite(fixedBufferMin) && fixedBufferMin >= 0;
+
+    if useFixedBuffer
+        selectedTargetWakeDelayMin = baseTargetWakeDelayMin + fixedBufferMin;
+        utils.logger('INFO', sprintf('Fixed buffer override active: %.2f min', fixedBufferMin));
+        utils.logger('INFO', sprintf('Operational wake target used on test set: %.2f min', selectedTargetWakeDelayMin));
+
+        tuning = struct();
+        tuning.BestBufferMin = fixedBufferMin;
+        tuning.BaseTargetWakeDelayMin = baseTargetWakeDelayMin;
+        tuning.SelectedTargetWakeDelayMin = selectedTargetWakeDelayMin;
+        tuning.CandidateBufferMin = candidateSafetyBufferMin(:);
+        tuning.Score = NaN(numel(candidateSafetyBufferMin), 1);
+        tuning.EarlyWakeRatePct = NaN(numel(candidateSafetyBufferMin), 1);
+        tuning.MeanOptimizedTTW = NaN(numel(candidateSafetyBufferMin), 1);
+        tuning.Table = table(candidateSafetyBufferMin(:), tuning.Score, tuning.EarlyWakeRatePct, tuning.MeanOptimizedTTW, ...
+            'VariableNames', {'BufferMin', 'PenalizedLoss', 'EarlyWakeRatePct', 'MeanOptimizedTTW'});
+
+        penaltySensitivity = table( ...
+            earlyPenaltyWeight, ...
+            fixedBufferMin, ...
+            selectedTargetWakeDelayMin, ...
+            NaN, ...
+            NaN, ...
+            'VariableNames', {'PenaltyWeight','BestBufferMin','SelectedTargetWakeDelayMin','MeanPenalizedLoss','EarlyWakeRatePct'});
+    end
+
+    useTuningCache = ~localIsFalsy(getenv('AEP_USE_TUNING_CACHE'));
+    refreshTuningCache = localIsTruthy(getenv('AEP_TUNING_CACHE_REFRESH'));
+    cacheDir = fullfile(dataDir, 'tuning_cache');
+    if ~exist(cacheDir, 'dir')
+        mkdir(cacheDir);
+    end
+    cacheKey = localBuildTuningCacheKey(dataSourceUsed, policy, trainTable, emergenceThreshold, simDtMin, earlyPenaltyWeight, candidateSafetyBufferMin);
+    cachePath = fullfile(cacheDir, sprintf('tuning_%s.mat', cacheKey));
+
+    loadedFromCache = false;
+    if ~useFixedBuffer && useTuningCache && ~refreshTuningCache && exist(cachePath, 'file')
+        try
+            cached = load(cachePath, 'cacheBundle');
+            if isfield(cached, 'cacheBundle') && isfield(cached.cacheBundle, 'Key') && strcmp(cached.cacheBundle.Key, cacheKey)
+                tuning = cached.cacheBundle.Tuning;
+                penaltySensitivity = cached.cacheBundle.PenaltySensitivity;
+                selectedTargetWakeDelayMin = tuning.SelectedTargetWakeDelayMin;
+                loadedFromCache = true;
+                utils.logger('INFO', sprintf('Loaded tuning cache: %s', cachePath));
+                utils.logger('INFO', sprintf('Cached safety buffer: %.2f min | Target: %.2f min', ...
+                    tuning.BestBufferMin, selectedTargetWakeDelayMin));
+            end
+        catch ME
+            utils.logger('WARN', sprintf('Tuning cache load failed (%s). Recomputing.', ME.message));
+        end
+    end
+
     runExpensiveTuning = localIsTruthy(getenv('AEP_RUN_EXPENSIVE_TUNING'));
-    if ~runExpensiveTuning
+    if ~useFixedBuffer && ~loadedFromCache && ~runExpensiveTuning
         estimatedSavedMin = 3;
         fallbackBufferMin = 0.75;
         selectedTargetWakeDelayMin = baseTargetWakeDelayMin + fallbackBufferMin;
@@ -162,7 +226,7 @@ function main()
             NaN, ...
             NaN, ...
             'VariableNames', {'PenaltyWeight','BestBufferMin','SelectedTargetWakeDelayMin','MeanPenalizedLoss','EarlyWakeRatePct'});
-    else
+    elseif ~useFixedBuffer && ~loadedFromCache
         utils.logger('INFO', sprintf('Starting safety-buffer tuning (%d candidates on %d training cases).', ...
             numel(candidateSafetyBufferMin), height(trainTable)));
         tuning = model.tuneSafetyBuffer( ...
@@ -183,6 +247,20 @@ function main()
         penaltySensitivity = model.runPenaltySensitivity( ...
             trainTable, baseTargetWakeDelayMin, candidateSafetyBufferMin, ...
             emergenceThreshold, simDtMin, penaltyWeights, policy, uncertainty);
+
+        if useTuningCache
+            try
+                cacheBundle = struct();
+                cacheBundle.Key = cacheKey;
+                cacheBundle.Tuning = tuning;
+                cacheBundle.PenaltySensitivity = penaltySensitivity;
+                cacheBundle.CreatedAt = datestr(now, 'yyyy-mm-dd HH:MM:SS');
+                save(cachePath, 'cacheBundle');
+                utils.logger('INFO', sprintf('Saved tuning cache: %s', cachePath));
+            catch ME
+                utils.logger('WARN', sprintf('Failed to save tuning cache (%s).', ME.message));
+            end
+        end
     end
 
     trainPolicy = policy;
@@ -370,6 +448,64 @@ function tf = localIsTruthy(raw)
     tf = any(token == ["1", "true", "yes", "y", "on"]);
 end
 
+function tf = localIsFalsy(raw)
+    if isempty(raw)
+        tf = false;
+        return;
+    end
+
+    token = lower(strtrim(string(raw)));
+    tf = any(token == ["0", "false", "no", "n", "off"]);
+end
+
+function key = localBuildTuningCacheKey(dataSourceUsed, policy, trainTable, emergenceThreshold, simDtMin, earlyPenaltyWeight, candidateSafetyBufferMin)
+    nTrain = height(trainTable);
+    meanAge = localSafeMean(trainTable, 'Age');
+    meanBmi = localSafeMean(trainTable, 'BMI');
+    meanDur = localSafeMean(trainTable, 'SurgeryDurationMin');
+    meanRate = localSafeMean(trainTable, 'InfusionRateMgPerMin');
+    bufMin = min(candidateSafetyBufferMin);
+    bufMax = max(candidateSafetyBufferMin);
+    bufStep = 0;
+    if numel(candidateSafetyBufferMin) > 1
+        bufStep = mode(round(diff(candidateSafetyBufferMin), 4));
+    end
+
+    robustSc = localFieldOr(policy, 'RobustNumScenarios', NaN);
+    robustCand = localFieldOr(policy, 'RobustNumStopCandidates', NaN);
+    robustAlpha = localFieldOr(policy, 'RobustCVaRAlpha', NaN);
+    robustW = localFieldOr(policy, 'RobustCVaRWeight', NaN);
+    robustEarlyW = localFieldOr(policy, 'RobustEarlyProbWeight', NaN);
+
+    raw = sprintf('%s|%s|n%d|age%.3f|bmi%.3f|dur%.3f|rate%.4f|thr%.3f|dt%.3f|pen%.2f|buf%.3f_%.3f_%.3f|rsc%.1f|rcand%.1f|ra%.3f|rw%.3f|rew%.3f', ...
+        char(dataSourceUsed), ...
+        char(localFieldOr(policy, 'OptimizerMode', 'legacy-bisection')), ...
+        nTrain, meanAge, meanBmi, meanDur, meanRate, ...
+        emergenceThreshold, simDtMin, earlyPenaltyWeight, ...
+        bufMin, bufMax, bufStep, robustSc, robustCand, robustAlpha, robustW, robustEarlyW);
+
+    key = matlab.lang.makeValidName(raw);
+    if strlength(key) > 140
+        key = extractBefore(key, 141);
+    end
+end
+
+function value = localSafeMean(tbl, varName)
+    if ismember(varName, tbl.Properties.VariableNames)
+        value = mean(tbl.(varName), 'omitnan');
+    else
+        value = NaN;
+    end
+end
+
+function value = localFieldOr(s, fieldName, defaultValue)
+    if isfield(s, fieldName)
+        value = s.(fieldName);
+    else
+        value = defaultValue;
+    end
+end
+
 function txt = localFmtDuration(sec)
     totalSec = max(0, round(sec));
     hh = floor(totalSec / 3600);
@@ -379,5 +515,20 @@ function txt = localFmtDuration(sec)
         txt = sprintf('%02d:%02d:%02d', hh, mm, ss);
     else
         txt = sprintf('%02d:%02d', mm, ss);
+    end
+end
+
+function value = localEnvNumber(name, defaultValue)
+    raw = getenv(name);
+    if isempty(raw)
+        value = defaultValue;
+        return;
+    end
+
+    parsed = str2double(raw);
+    if isfinite(parsed)
+        value = parsed;
+    else
+        value = defaultValue;
     end
 end
