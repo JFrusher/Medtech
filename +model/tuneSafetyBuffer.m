@@ -33,9 +33,13 @@ function tuning = tuneSafetyBuffer(trainTable, baseTargetWakeDelayMin, candidate
     policyLocal.ShowProgress = false;
 
     loopStart = tic;
+    utils.logger('INFO', sprintf('Safety-buffer tuning started (%d candidates, %d cases).', ...
+        numCandidates, height(trainTable)));
 
     for i = 1:numCandidates
         testTargetDelay = baseTargetWakeDelayMin + candidateBufferMin(i);
+        utils.logger('INFO', sprintf('Safety-buffer candidate %d/%d started (buffer=%.2f min).', ...
+            i, numCandidates, candidateBufferMin(i)));
         metrics = model.evaluateStrategy( ...
             trainTable, testTargetDelay, emergenceThresholdCe, dtMin, earlyPenaltyWeight, policyLocal, uncertaintyConfig);
 

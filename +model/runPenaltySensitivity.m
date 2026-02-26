@@ -25,8 +25,11 @@ function sensitivityTable = runPenaltySensitivity(trainTable, baseTargetWakeDela
     policyLocal = policyConfig;
     policyLocal.ShowProgress = false;
     loopStart = tic;
+    utils.logger('INFO', sprintf('Penalty sensitivity started (%d penalty settings).', n));
 
     for i = 1:n
+        utils.logger('INFO', sprintf('Penalty setting %d/%d started (w=%.1f).', ...
+            i, n, penaltyWeights(i)));
         tuning = model.tuneSafetyBuffer( ...
             trainTable, baseTargetWakeDelayMin, candidateBufferMin, emergenceThresholdCe, ...
             dtMin, penaltyWeights(i), policyLocal, uncertaintyConfig);

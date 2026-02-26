@@ -9,6 +9,21 @@ function main()
 %   Prints key performance and cost-savings metrics; generates figures.
 % Author:
 %   GitHub Copilot (GPT-5.3-Codex)
+%
+% Environment variables (quick reference):
+%   AEP_DATA_SOURCE
+%       synthetic | vitaldb | retrospective | mimic-iv
+%       Default: vitaldb
+%   AEP_OPTIMIZER_MODE
+%       robust-explainable | legacy-bisection
+%       Default: robust-explainable
+%   AEP_PARALLEL_WORKERS
+%       Integer worker count (1 forces serial mode)
+%       Default: auto-detect (typically cores-1, bounded by local profile)
+%   AEP_RUN_EXPENSIVE_TUNING
+%       true/false
+%       false (default): skips expensive tuning/sensitivity for faster runs
+%       true: runs full safety-buffer and penalty sensitivity sweeps
 
     %clc;
     setupProject();
@@ -118,24 +133,57 @@ function main()
     utils.logger('INFO', sprintf('Uncertainty profile active: %s', uncertainty.ProfileName));
 
     candidateSafetyBufferMin = 0:0.25:3;
-    tuning = model.tuneSafetyBuffer( ...
-        trainTable, ...
-        baseTargetWakeDelayMin, ...
-        candidateSafetyBufferMin, ...
-        emergenceThreshold, ...
-        simDtMin, ...
-        earlyPenaltyWeight, ...
-        policy, ...
-        uncertainty);
+    runExpensiveTuning = localIsTruthy(getenv('AEP_RUN_EXPENSIVE_TUNING'));
+    if ~runExpensiveTuning
+        estimatedSavedMin = 3;
+        fallbackBufferMin = 0.75;
+        selectedTargetWakeDelayMin = baseTargetWakeDelayMin + fallbackBufferMin;
 
-    selectedTargetWakeDelayMin = tuning.SelectedTargetWakeDelayMin;
-    utils.logger('INFO', sprintf('Selected safety buffer from training: %.2f min', tuning.BestBufferMin));
-    utils.logger('INFO', sprintf('Operational wake target used on test set: %.2f min', selectedTargetWakeDelayMin));
+        utils.logger('INFO', sprintf(['Skipping expensive tuning/sensitivity (estimated ~%d min). ', ...
+            'Set AEP_RUN_EXPENSIVE_TUNING=true to enable full search.'], estimatedSavedMin));
+        utils.logger('INFO', sprintf('Using fast default safety buffer: %.2f min', fallbackBufferMin));
+        utils.logger('INFO', sprintf('Operational wake target used on test set: %.2f min', selectedTargetWakeDelayMin));
 
-    penaltyWeights = [6 8 10 12 15 18]';
-    penaltySensitivity = model.runPenaltySensitivity( ...
-        trainTable, baseTargetWakeDelayMin, candidateSafetyBufferMin, ...
-        emergenceThreshold, simDtMin, penaltyWeights, policy, uncertainty);
+        tuning = struct();
+        tuning.BestBufferMin = fallbackBufferMin;
+        tuning.BaseTargetWakeDelayMin = baseTargetWakeDelayMin;
+        tuning.SelectedTargetWakeDelayMin = selectedTargetWakeDelayMin;
+        tuning.CandidateBufferMin = candidateSafetyBufferMin(:);
+        tuning.Score = NaN(numel(candidateSafetyBufferMin), 1);
+        tuning.EarlyWakeRatePct = NaN(numel(candidateSafetyBufferMin), 1);
+        tuning.MeanOptimizedTTW = NaN(numel(candidateSafetyBufferMin), 1);
+        tuning.Table = table(candidateSafetyBufferMin(:), tuning.Score, tuning.EarlyWakeRatePct, tuning.MeanOptimizedTTW, ...
+            'VariableNames', {'BufferMin', 'PenalizedLoss', 'EarlyWakeRatePct', 'MeanOptimizedTTW'});
+
+        penaltySensitivity = table( ...
+            earlyPenaltyWeight, ...
+            fallbackBufferMin, ...
+            selectedTargetWakeDelayMin, ...
+            NaN, ...
+            NaN, ...
+            'VariableNames', {'PenaltyWeight','BestBufferMin','SelectedTargetWakeDelayMin','MeanPenalizedLoss','EarlyWakeRatePct'});
+    else
+        utils.logger('INFO', sprintf('Starting safety-buffer tuning (%d candidates on %d training cases).', ...
+            numel(candidateSafetyBufferMin), height(trainTable)));
+        tuning = model.tuneSafetyBuffer( ...
+            trainTable, ...
+            baseTargetWakeDelayMin, ...
+            candidateSafetyBufferMin, ...
+            emergenceThreshold, ...
+            simDtMin, ...
+            earlyPenaltyWeight, ...
+            policy, ...
+            uncertainty);
+
+        selectedTargetWakeDelayMin = tuning.SelectedTargetWakeDelayMin;
+        utils.logger('INFO', sprintf('Selected safety buffer from training: %.2f min', tuning.BestBufferMin));
+        utils.logger('INFO', sprintf('Operational wake target used on test set: %.2f min', selectedTargetWakeDelayMin));
+
+        penaltyWeights = [6 8 10 12 15 18]';
+        penaltySensitivity = model.runPenaltySensitivity( ...
+            trainTable, baseTargetWakeDelayMin, candidateSafetyBufferMin, ...
+            emergenceThreshold, simDtMin, penaltyWeights, policy, uncertainty);
+    end
 
     trainPolicy = policy;
     trainPolicy.ShowProgress = true;
@@ -310,6 +358,16 @@ function [trainTable, testTable] = localSplit(fullTable, trainRatio)
     nTrain = max(1, min(height(fullTable) - 1, round(trainRatio * height(fullTable))));
     trainTable = fullTable(idx(1:nTrain), :);
     testTable = fullTable(idx(nTrain + 1:end), :);
+end
+
+function tf = localIsTruthy(raw)
+    if isempty(raw)
+        tf = false;
+        return;
+    end
+
+    token = lower(strtrim(string(raw)));
+    tf = any(token == ["1", "true", "yes", "y", "on"]);
 end
 
 function txt = localFmtDuration(sec)
