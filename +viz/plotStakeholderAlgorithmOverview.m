@@ -9,7 +9,7 @@ function out = plotStakeholderAlgorithmOverview(projectRoot)
 % Outputs:
 %   out - Struct with figure handle, output paths, and selected metrics.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 1 || strlength(string(projectRoot)) == 0
         projectRoot = fileparts(fileparts(mfilename('fullpath')));

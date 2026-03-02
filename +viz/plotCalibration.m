@@ -10,7 +10,7 @@ function plotCalibration(predictedDelayMin, observedDelayMin, plotTitle, meta)
 % Outputs:
 %   None. Generates a calibration figure.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 3
         plotTitle = 'Wake Delay Calibration';

@@ -7,7 +7,7 @@ function setupProject()
 % Outputs:
 %   None. Adds project root and all subfolders to MATLAB path.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     projectRoot = fileparts(mfilename('fullpath'));
     addpath(genpath(projectRoot));

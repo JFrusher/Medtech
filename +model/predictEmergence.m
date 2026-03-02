@@ -16,7 +16,7 @@ function result = predictEmergence(patient, surgeryEndMin, maintenanceRateMgPerM
 %   result - Struct with standard and optimized stop times, wake times,
 %            and TTW metrics for direct comparison.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 7
         earlyPenaltyWeight = 12;

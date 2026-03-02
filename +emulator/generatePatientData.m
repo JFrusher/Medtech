@@ -8,6 +8,7 @@ function patientTable = generatePatientData(numPatients)
 % Outputs:
 %   patientTable - MATLAB table of patient characteristics and case details.
 % Author:
+%   J Frusher
 
     if nargin < 1
         numPatients = 50;

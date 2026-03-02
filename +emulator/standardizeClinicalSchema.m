@@ -9,7 +9,7 @@ function clinicalTable = standardizeClinicalSchema(rawTable, sourceName)
 % Outputs:
 %   clinicalTable - Standardized table with required model fields.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 2
         sourceName = 'unknown';

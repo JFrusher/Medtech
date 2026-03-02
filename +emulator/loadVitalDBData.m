@@ -7,7 +7,7 @@ function vitalTable = loadVitalDBData(csvPath)
 % Outputs:
 %   vitalTable - Standardized table ready for train/test splitting.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 1 || isempty(csvPath)
         error('VitalDB CSV path is required.');

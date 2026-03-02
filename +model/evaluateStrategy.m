@@ -14,7 +14,7 @@ function metrics = evaluateStrategy(patientTable, targetWakeDelayMin, emergenceT
 % Outputs:
 %   metrics - Struct containing TTW arrays and summary performance metrics.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 5
         earlyPenaltyWeight = 12;

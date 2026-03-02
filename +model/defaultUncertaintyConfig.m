@@ -7,7 +7,7 @@ function uncertainty = defaultUncertaintyConfig(profileName)
 % Outputs:
 %   uncertainty - Struct with perturbation scales and residual delay model.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 1
         profileName = 'moderate';

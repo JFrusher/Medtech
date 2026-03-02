@@ -7,7 +7,7 @@ function testPKInvariants()
 % Outputs:
 %   None. Throws assertion error on failure.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     p = struct('Age',55,'WeightKg',80,'HeightCm',175,'LBM',58);
 

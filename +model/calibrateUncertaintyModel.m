@@ -11,7 +11,7 @@ function calibrated = calibrateUncertaintyModel(trainTable, emergenceThresholdCe
 % Outputs:
 %   calibrated - Updated uncertainty configuration.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     calibrated = baseUncertainty;
 

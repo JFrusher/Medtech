@@ -8,7 +8,7 @@ function plotComparison(summary)
 % Outputs:
 %   None. Creates multiple MATLAB figures (docked windows).
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     standard = summary.StandardTTW;
     optimized = summary.OptimizedTTW;

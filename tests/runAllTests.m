@@ -7,7 +7,7 @@ function runAllTests()
 % Outputs:
 %   None. Prints pass/fail status and throws on failure.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     setupProject();
     utils.logger('INFO', 'Running testPKInvariants...');

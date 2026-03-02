@@ -11,7 +11,7 @@ function subgroupTable = subgroupPerformance(patientTable, optimizedTTW, targetW
 % Outputs:
 %   subgroupTable - Summary table with stratum metrics.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 4
         earlyAlarmThresholdMin = 1.0;

@@ -8,7 +8,7 @@ function out = makeStakeholderPlot()
 % Outputs:
 %   out - Struct with output file paths and key metrics.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     setupProject();
     rng(42, 'twister');

@@ -9,7 +9,7 @@ function addMetadataBox(figHandle, metaText, position)
 % Outputs:
 %   None. Adds a styled annotation textbox to the figure.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 3 || isempty(position)
         position = [0.73 0.70 0.25 0.24];

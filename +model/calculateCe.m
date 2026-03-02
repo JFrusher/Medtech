@@ -11,7 +11,7 @@ function sim = calculateCe(patient, timeMin, infusionRateMgPerMin)
 %   sim - Struct containing Cp (central), Ce (effect-site), C2, C3, and
 %         model constants used in the simulation.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     validateattributes(timeMin, {'numeric'}, {'vector', 'nonempty', 'increasing'});
     validateattributes(infusionRateMgPerMin, {'numeric'}, {'vector', 'numel', numel(timeMin)});

@@ -15,7 +15,7 @@ function tuning = tuneSafetyBuffer(trainTable, baseTargetWakeDelayMin, candidate
 % Outputs:
 %   tuning - Struct containing selected buffer and tuning metrics table.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 7 || isempty(policyConfig)
         policyConfig = model.defaultPolicyConfig(baseTargetWakeDelayMin);

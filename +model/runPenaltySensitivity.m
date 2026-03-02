@@ -14,7 +14,7 @@ function sensitivityTable = runPenaltySensitivity(trainTable, baseTargetWakeDela
 % Outputs:
 %   sensitivityTable - Table of selected buffer and metrics by penalty.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     n = numel(penaltyWeights);
     bestBuffer = zeros(n,1);

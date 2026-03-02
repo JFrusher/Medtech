@@ -7,7 +7,7 @@ function out = makeStakeholderAlgorithmPlot()
 % Outputs:
 %   out - Struct with output file paths and selected operating-point data.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     setupProject();
     projectRoot = fileparts(mfilename('fullpath'));

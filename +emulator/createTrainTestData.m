@@ -11,7 +11,7 @@ function [trainTable, testTable, fullTable] = createTrainTestData(totalPatients,
 %   testTable  - Testing dataset table.
 %   fullTable  - Full generated cohort before split.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 1
         totalPatients = 300;

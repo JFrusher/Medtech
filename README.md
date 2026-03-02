@@ -1,71 +1,82 @@
-# Anesthesia Emergence Optimizer (MATLAB + VitalDB)
+# Anesthesia Emergence Optimizer
 
-Simulation-first decision-support project for optimizing anesthesia stop timing and reducing post-op wake delay risk/cost.
+Portfolio project exploring how to optimize anesthesia stop timing using pharmacokinetic/pharmacodynamic simulation, safety-aware optimization, and clinical-style data pipelines.
 
-This repository combines:
-- **PK/PD simulation** (Schnider-style 3-compartment + effect site)
-- **Safety-aware optimization** (legacy bisection and robust explainable mode)
-- **Clinical-data ETL** (VitalDB / MIMIC-IV / CSV)
-- **Portfolio-ready outputs** (metrics CSVs + saved figures)
+## Project Snapshot
 
----
+- **Domain:** Perioperative decision support (research prototype)
+- **Core idea:** Predict when a patient will emerge, then choose a safer/better infusion stop time
+- **Optimization goal:** Reduce wake delay while strongly penalizing early-emergence risk
+- **Stack:** MATLAB (modeling + evaluation + visualization), Python ETL (VitalDB/MIMIC-style preprocessing)
 
-## Why this project
-
-Operating rooms are expensive and wake timing is safety-critical. This project explores how to choose infusion stop times to:
-- lower mean Time-to-Wake (TTW),
-- avoid dangerous early emergence,
-- and estimate potential annual OR savings.
-
-It is designed as an explainable prototype for research/pitch use, **not** a bedside clinical controller.
+This is an explainable prototype for research and portfolio demonstration, not a bedside controller.
 
 ---
 
-## Key Features
+## Why this project matters
 
-- **Dual optimizer modes**
-  - `legacy-bisection`: fast baseline
-  - `robust-explainable`: scenario-based risk-aware optimization
-- **Safety-first objective** with asymmetric early-wake penalties
-- **Train/test split workflow** with uncertainty-aware evaluation
-- **VitalDB integration** via Python ETL (`vitaldb.load_clinical_data` path)
-- **Caching + runtime controls** for expensive tuning
-- **Automatic figure export** (`.png` + `.fig`) into timestamped folders
+Operating room time is expensive, and wake timing is safety-critical. In routine workflows, conservative timing can increase post-op delay. This project demonstrates a structured approach to:
+
+- personalize stop-time recommendations,
+- evaluate safety/efficiency trade-offs,
+- and communicate potential operational value with transparent metrics and figures.
 
 ---
 
-## Repository Structure
+## What I built
+
+### 1) PK/PD simulation engine
+
+- Schnider-style 3-compartment model with effect-site dynamics
+- configurable emergence threshold and simulation timestep
+- patient-specific covariates (age/weight/BMI/sex/LBM/procedure profile)
+
+### 2) Safety-aware optimization layer
+
+- dual policy modes:
+  - `legacy-bisection` (baseline)
+  - `robust-explainable` (scenario-based, uncertainty-aware)
+- asymmetric objective that heavily penalizes early wake behavior
+- safety-buffer tuning on train split, then fixed-policy evaluation on held-out test split
+
+### 3) Data and evaluation pipeline
+
+- synthetic cohort generation + retrospective/VitalDB/MIMIC-style loaders
+- standardized schema conversion
+- uncertainty model calibration
+- subgroup analysis and penalty sensitivity sweeps
+
+### 4) Communication-ready outputs
+
+- stakeholder-oriented figures (`.png` + `.fig`)
+- exported CSV metrics for reporting and reproducibility
+- one-command hero plot workflow for presentations
+
+---
+
+## Repository structure
 
 ```text
 .
 ├─ main.m
 ├─ setupProject.m
-├─ README.md
 ├─ requirements.txt
-├─ +emulator/
-├─ +model/
-├─ +viz/
-├─ +utils/
-├─ etl/
-├─ data/
-├─ figures/
-├─ tests/
-└─ explanations/
+├─ +emulator/    # data generation/loading + schema normalization
+├─ +model/       # PK/PD, optimization, uncertainty, evaluation
+├─ +viz/         # plots for technical + stakeholder communication
+├─ +utils/       # logging, parallel config, figure persistence
+├─ etl/          # Python ETL scripts and SQL templates
+├─ data/         # generated datasets + tuning artifacts
+├─ figures/      # exported run outputs
+└─ tests/        # regression + invariant checks
 ```
-
-- `main.m`: orchestration (data source, tuning, eval, outputs)
-- `+model/`: PK/PD, optimization, evaluation, sensitivity
-- `+emulator/`: data loading + schema standardization
-- `etl/`: Python pipeline for building de-identified cohort files
-- `+viz/`: publication/pitch style figures
-- `+utils/`: logging, parallel setup, figure export helpers
 
 ---
 
-## Quick Start (Local MATLAB)
+## Quick start (MATLAB)
 
-1) Open MATLAB in repo root.
-2) Set minimal env options (optional):
+1. Open MATLAB in repo root.
+2. (Optional) set runtime options:
 
 ```matlab
 setenv('AEP_DATA_SOURCE','vitaldb')
@@ -74,41 +85,39 @@ setenv('AEP_PARALLEL_WORKERS','8')
 setenv('AEP_RUN_EXPENSIVE_TUNING','false')
 ```
 
-3) Run:
+3. Run full pipeline:
 
 ```matlab
 setupProject
 main
 ```
 
-Outputs are written to `data/` and figures to `figures/run_<timestamp>/`.
+Outputs are written to `data/` and `figures/run_<timestamp>/`.
 
 ---
 
-## One-Command Stakeholder Hero Plot (No Full Rerun)
+## Quick stakeholder plot (no full rerun)
 
-If `data/testPatients.csv` already exists from a prior run, generate a single
-presentation-ready summary figure without rerunning tuning/train/test pipeline:
+If `data/testPatients.csv` exists, generate a presentation figure directly:
 
 ```matlab
 setupProject
 makeStakeholderPlot
 ```
 
-Output is saved to `figures/hero_<timestamp>/stakeholder_hero_plot.png`
-and `.fig`.
+Output: `figures/hero_<timestamp>/stakeholder_hero_plot.png` (+ `.fig`).
 
 ---
 
-## Build VitalDB Files (Python ETL)
+## Python ETL (VitalDB)
 
-Install deps:
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Generate both model-ready and detailed files:
+Build de-identified cohort files:
 
 ```bash
 python etl/build_deidentified_cohort.py \
@@ -117,78 +126,52 @@ python etl/build_deidentified_cohort.py \
   --detailed-output data/vitaldb_detailed_cases.csv
 ```
 
-Main MATLAB loader in `vitaldb` mode prioritizes detailed/standard according to current `main.m` settings.
-
-See full ETL instructions in `etl/RUN_ETL.md`.
+See `etl/RUN_ETL.md` for full instructions.
 
 ---
 
-## Runtime Configuration (Environment Variables)
+## Runtime configuration
 
-Configured in/consumed by `main.m` and helpers.
-
-- `AEP_DATA_SOURCE`
-  - `synthetic | vitaldb | retrospective | mimic-iv`
-- `AEP_OPTIMIZER_MODE`
-  - `robust-explainable | legacy-bisection`
-- `AEP_PARALLEL_WORKERS`
-  - integer worker count (`1` forces serial)
-- `AEP_RUN_EXPENSIVE_TUNING`
-  - `true/false` (full safety-buffer + sensitivity search)
-- `AEP_USE_TUNING_CACHE`
-  - `true/false` (reuse prior tuning artifacts)
-- `AEP_TUNING_CACHE_REFRESH`
-  - `true/false` (force re-tune even if cache exists)
-- `AEP_FIXED_BUFFER_MIN`
-  - numeric buffer override (e.g. `0.75`) to bypass buffer search
+- `AEP_DATA_SOURCE`: `synthetic | vitaldb | retrospective | mimic-iv`
+- `AEP_OPTIMIZER_MODE`: `robust-explainable | legacy-bisection`
+- `AEP_PARALLEL_WORKERS`: integer worker count (`1` forces serial)
+- `AEP_RUN_EXPENSIVE_TUNING`: `true/false`
+- `AEP_USE_TUNING_CACHE`: `true/false`
+- `AEP_TUNING_CACHE_REFRESH`: `true/false`
+- `AEP_FIXED_BUFFER_MIN`: numeric override for fixed safety buffer
 
 ---
 
-## Performance Notes
+## Engineering highlights (portfolio lens)
 
-- Robust mode can be expensive on large cohorts.
-- Recommended workflow:
-  - iterate locally with `AEP_RUN_EXPENSIVE_TUNING=false` or fixed buffer,
-  - run full robust sweeps on HPC.
-- Parallel speedup is workload/hardware dependent; benchmark 6/8/10 workers.
-
----
-
-## Figures & Artifacts
-
-`main` produces:
-- comparison and calibration figures (docked windows)
-- algorithm overview figure
-- exported `.png` and `.fig` copies in `figures/run_<timestamp>/`
-
-CSV outputs include:
-- `trainPatients.csv`, `testPatients.csv`
-- `trainingBufferTuning.csv`
-- `penaltySensitivity.csv`
-- `subgroupPerformance.csv`
+- **Reproducibility:** deterministic seeding, explicit train/test separation
+- **Performance controls:** parallel execution, cache keys for expensive tuning runs
+- **Robustness:** uncertainty calibration + seed sweeps + subgroup checks
+- **Explainability:** conservative policy design and documented optimization equations
+- **Communication:** stakeholder-ready plots and concise result artifacts
 
 ---
 
-## Validation / Tests
+## Validation
 
-Run MATLAB tests:
+Run test suite:
 
 ```matlab
 tests.runAllTests
 ```
 
----
-
-## Skills Learnt
-
-This project demonstrates:
-- end-to-end scientific software design (ETL -> model -> evaluation -> visualization),
-- safety-aware optimization under uncertainty,
-- practical engineering trade-offs (parallelization, caching, runtime controls),
-- communication-ready outputs for technical and non-technical stakeholders.
+Tests include PK invariants and regression-style snapshot checks.
 
 ---
 
-## Important Disclaimer
+## Limitations and responsible use
 
-This repository is for research/prototyping and educational demonstration. It is not approved for clinical decision-making or patient care deployment.
+- Research/prototype software only
+- Not validated for direct clinical deployment
+- Must not be used as autonomous patient-care control
+
+---
+
+## Author note
+
+This project is part of my portfolio to demonstrate applied optimization in healthcare operations, scientific modeling, and end-to-end technical communication across technical and non-technical audiences.

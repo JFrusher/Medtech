@@ -7,7 +7,7 @@ function policy = defaultPolicyConfig(targetWakeDelayMin)
 % Outputs:
 %   policy - Struct containing policy and safety constraints.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 1
         targetWakeDelayMin = 3;

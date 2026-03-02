@@ -8,7 +8,7 @@ function main()
 % Outputs:
 %   Prints key performance and cost-savings metrics; generates figures.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 %
 % Environment variables (quick reference):
 %   AEP_DATA_SOURCE

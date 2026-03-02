@@ -9,7 +9,7 @@ function logger(level, message)
 % Outputs:
 %   None. Writes formatted text to console.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 2
         error('utils.logger requires level and message inputs.');

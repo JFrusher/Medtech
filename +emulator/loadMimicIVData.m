@@ -7,7 +7,7 @@ function mimicTable = loadMimicIVData(csvPath)
 % Outputs:
 %   mimicTable - Standardized table ready for train/test splitting.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     if nargin < 1 || isempty(csvPath)
         error('MIMIC-IV CSV path is required.');

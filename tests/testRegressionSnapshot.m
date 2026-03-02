@@ -7,7 +7,7 @@ function testRegressionSnapshot()
 % Outputs:
 %   None. Throws assertion error on failure.
 % Author:
-%   GitHub Copilot (GPT-5.3-Codex)
+%   J Frusher
 
     rng(777, 'twister');
     data = emulator.generatePatientData(60);
