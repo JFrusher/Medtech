@@ -347,6 +347,7 @@ Technical and stakeholder documentation is in `explanations/`:
 - `CLINICAL_DATA_WORKFLOW.md`
 - `STAKEHOLDER_PRESENTATION_GUIDE.md`
 - `VISUAL_PRESENTATION_CONCEPTS.md`
+- `CLIENT_PRICING_SHEET.md`
 
 ---
 
