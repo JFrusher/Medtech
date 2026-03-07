@@ -17,21 +17,35 @@ Predict patient emergence and recommend infusion stop times that reduce wake del
 
 ## Table of Contents
 
-- [Project Snapshot](#project-snapshot)
-- [Why This Project Matters](#why-this-project-matters)
-- [What I Built](#what-i-built)
-- [System Architecture](#system-architecture)
-- [Model and Optimization (Technical Core)](#model-and-optimization-technical-core)
-- [Repository Structure](#repository-structure)
-- [Quick Start](#quick-start)
-- [Configuration](#configuration)
-- [Data Pipeline and ETL](#data-pipeline-and-etl)
-- [Outputs and Figures](#outputs-and-figures)
-- [Validation and Testing](#validation-and-testing)
-- [Reproducibility and Engineering Choices](#reproducibility-and-engineering-choices)
-- [Interview Talking Points](#interview-talking-points)
-- [Limitations and Responsible Use](#limitations-and-responsible-use)
-- [Project Documents](#project-documents)
+- [Anesthesia Emergence Optimizer](#anesthesia-emergence-optimizer)
+  - [Table of Contents](#table-of-contents)
+  - [Project Snapshot](#project-snapshot)
+    - [At a glance](#at-a-glance)
+  - [Why This Project Matters](#why-this-project-matters)
+  - [What I Built](#what-i-built)
+    - [1) PK/PD simulation engine](#1-pkpd-simulation-engine)
+    - [2) Safety-aware optimization policy](#2-safety-aware-optimization-policy)
+    - [3) Uncertainty-aware evaluation](#3-uncertainty-aware-evaluation)
+    - [4) Communication layer](#4-communication-layer)
+  - [System Architecture](#system-architecture)
+  - [Model and Optimization (Technical Core)](#model-and-optimization-technical-core)
+    - [PK/PD dynamics](#pkpd-dynamics)
+    - [Safety-weighted objective](#safety-weighted-objective)
+    - [Policy design choices](#policy-design-choices)
+  - [Repository Structure](#repository-structure)
+  - [Quick Start](#quick-start)
+    - [MATLAB full pipeline](#matlab-full-pipeline)
+    - [Generate stakeholder-ready plot only](#generate-stakeholder-ready-plot-only)
+    - [Run test suite](#run-test-suite)
+  - [Configuration](#configuration)
+  - [Data Pipeline and ETL](#data-pipeline-and-etl)
+  - [Outputs and Figures](#outputs-and-figures)
+  - [Results Gallery](#results-gallery)
+  - [Validation and Testing](#validation-and-testing)
+  - [Reproducibility and Engineering Choices](#reproducibility-and-engineering-choices)
+  - [Limitations and Responsible Use](#limitations-and-responsible-use)
+  - [Project Documents](#project-documents)
+  - [Author](#author)
 
 ---
 
@@ -266,6 +280,26 @@ Common visualization entry points:
 
 ---
 
+## Results Gallery
+
+<div align="center">
+
+| Stakeholder Hero Plot | Algorithm Overview |
+|---|---|
+| [<img src="figures/hero_20260301_160601/stakeholder_hero_plot.png" alt="Stakeholder Hero Plot" width="450"/>](figures/hero_20260301_160601/stakeholder_hero_plot.png) | [<img src="figures/posthero_20260302_142522/stakeholder_algorithm_overview.png" alt="Stakeholder Algorithm Overview" width="450"/>](figures/posthero_20260302_142522/stakeholder_algorithm_overview.png) |
+
+</div>
+
+<div align="center">
+
+[<img src="figures/simple_algorithm_20260302_143354/simple_algorithm_plot.png" alt="Simple Algorithm Plot" width="700"/>](figures/simple_algorithm_20260302_143354/simple_algorithm_plot.png)
+
+</div>
+
+These are sample generated outputs from the current repository run history. Running `main`, `makeStakeholderPlot`, or `makeStakeholderAlgorithmPlot` will generate timestamped folders with updated visuals.
+
+---
+
 ## Validation and Testing
 
 Current tests focus on model behavior and regression stability:
@@ -289,18 +323,6 @@ Validation philosophy:
 - Cache-aware expensive tuning (`data/tuning_cache/`)
 - Parallel execution controls for runtime management
 - Modular package structure for clear separation of concerns
-
----
-
-## Interview Talking Points
-
-If you're reviewing this as a portfolio project, key points to discuss are:
-
-1. **Clinical-to-technical translation:** turning a safety-critical workflow problem into a formal optimization objective
-2. **Risk-aware optimization:** asymmetric penalties and conservative correction layers
-3. **Evaluation discipline:** avoiding leakage and stress-testing under uncertainty
-4. **Product thinking:** converting technical outputs into stakeholder artifacts and operational narrative
-5. **Engineering quality:** reproducibility, test harness, modularity, and configuration-driven experimentation
 
 ---
 
