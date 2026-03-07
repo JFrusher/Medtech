@@ -1,5 +1,5 @@
-# Ignore generated/auxiliary explanation docs
-explanations/
+# Keep explanations tracked (contains core project documentation)
+# If needed in future, ignore only transient drafts via explanations/drafts/
 
 # --- OS files ---
 .DS_Store

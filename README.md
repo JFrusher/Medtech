@@ -45,6 +45,7 @@ Predict patient emergence and recommend infusion stop times that reduce wake del
   - [Reproducibility and Engineering Choices](#reproducibility-and-engineering-choices)
   - [Limitations and Responsible Use](#limitations-and-responsible-use)
   - [Project Documents](#project-documents)
+    - [Repository Maintenance Pack](#repository-maintenance-pack)
   - [Author](#author)
 
 ---
@@ -348,6 +349,19 @@ Technical and stakeholder documentation is in `explanations/`:
 - `STAKEHOLDER_PRESENTATION_GUIDE.md`
 - `VISUAL_PRESENTATION_CONCEPTS.md`
 - `CLIENT_PRICING_SHEET.md`
+
+---
+
+## Repository Maintenance Pack
+
+To keep this repository maintainable while inactive (“gathering dust”), use:
+
+- `PROJECT_HANDOVER.md` — quick re-entry guide and runbook
+- `PRE_PUSH_CHECKLIST.md` — finalization checklist before commit/push
+- `CONTRIBUTING.md` — contribution boundaries and workflow expectations
+- `SECURITY_AND_SAFETY.md` — safety posture and data/security handling rules
+- `CHANGELOG.md` — freeze/prep history and major repository updates
+- `.editorconfig` — baseline formatting consistency across editors
 
 ---
 
